@@ -38,18 +38,62 @@ void disk_close(void)
 
 int disk_read_block(uint32_t block_num, void *buf)
 {
-    /* TODO: implement block read */
-    (void)block_num;
-    (void)buf;
-    return -1;
+    if (g_disk_fd < 0) {
+        fprintf(stderr, "disk_read_block: disk not open\n");
+        return -1;
+    }
+    if (block_num >= DISK_SIZE_BLOCKS) {
+        fprintf(stderr, "disk_read_block: block %u out of range\n", block_num);
+        return -1;
+    }
+    off_t offset = (off_t)block_num * BLOCK_SIZE;
+    if (lseek(g_disk_fd, offset, SEEK_SET) < 0) {
+        perror("disk_read_block: lseek");
+        return -1;
+    }
+    ssize_t total = 0;
+    while (total < BLOCK_SIZE) {
+        ssize_t n = read(g_disk_fd, (char *)buf + total, BLOCK_SIZE - total);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            perror("disk_read_block: read");
+            return -1;
+        }
+        if (n == 0) {
+            memset((char *)buf + total, 0, BLOCK_SIZE - total);
+            break;
+        }
+        total += n;
+    }
+    return 0;
 }
 
 int disk_write_block(uint32_t block_num, const void *buf)
 {
-    /* TODO: implement block write */
-    (void)block_num;
-    (void)buf;
-    return -1;
+    if (g_disk_fd < 0) {
+        fprintf(stderr, "disk_write_block: disk not open\n");
+        return -1;
+    }
+    if (block_num >= DISK_SIZE_BLOCKS) {
+        fprintf(stderr, "disk_write_block: block %u out of range\n", block_num);
+        return -1;
+    }
+    off_t offset = (off_t)block_num * BLOCK_SIZE;
+    if (lseek(g_disk_fd, offset, SEEK_SET) < 0) {
+        perror("disk_write_block: lseek");
+        return -1;
+    }
+    ssize_t total = 0;
+    while (total < BLOCK_SIZE) {
+        ssize_t n = write(g_disk_fd, (const char *)buf + total, BLOCK_SIZE - total);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            perror("disk_write_block: write");
+            return -1;
+        }
+        total += n;
+    }
+    return 0;
 }
 
 void disk_sync(void)
