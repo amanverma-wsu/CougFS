@@ -9,12 +9,6 @@ A simplified Unix-like file system implementation in C that runs entirely in use
 - Persistent storage via virtual disk image (disk.img)
 - Command-line interface
 
-## Quick Start
-\`\`\`bash
-# Clone the repository
-git clone https://github.com/amanverma-wsu/CougFS.git
-cd CougFS
-
 # Build
 make
 
@@ -30,11 +24,3 @@ make test
 - **Tony Cao** (Tony2K3)
 - **Srishanth Reddy Surakanti** (SURAKANTISRISHANTHREDDY)
 - **Alan Qiu** (AlanRQiu)
-
-## Documentation
-- [Design & Architecture](docs/DESIGN.md)
-- [API Reference](docs/API.md)
-- [Development Guide](docs/DEVELOPMENT.md)
-
-## License
-MIT License - See LICENSE file
