@@ -32,8 +32,11 @@ int bitmap_init(void)
 
 int bitmap_sync(void)
 {
-    /* TODO: implement */
-    return -1;
+    if (disk_write_block(INODE_BITMAP_BLOCK, inode_bitmap) < 0)
+        return -1;
+    if (disk_write_block(DATA_BITMAP_BLOCK, data_bitmap) < 0)
+        return -1;
+    return 0;
 }
 
 int bitmap_alloc_inode(void)
@@ -70,8 +73,39 @@ uint32_t bitmap_free_inode_count(void)
     return count;
 }
 
-/* Data block functions - TODO */
-int bitmap_alloc_block(void) { return -1; }
-void bitmap_free_block(uint32_t block_num) { (void)block_num; }
-int bitmap_block_is_set(uint32_t block_num) { (void)block_num; return 0; }
-uint32_t bitmap_free_block_count(void) { return 0; }
+int bitmap_alloc_block(void)
+{
+    for (uint32_t i = 0; i < MAX_DATA_BLOCKS; i++) {
+        if (!bit_test(data_bitmap, i)) {
+            bit_set(data_bitmap, i);
+            return (int)(i + DATA_BLOCK_START);
+        }
+    }
+    return -1;
+}
+
+void bitmap_free_block(uint32_t block_num)
+{
+    if (block_num >= DATA_BLOCK_START && block_num < DISK_SIZE_BLOCKS) {
+        uint32_t idx = block_num - DATA_BLOCK_START;
+        bit_clear(data_bitmap, idx);
+    }
+}
+
+int bitmap_block_is_set(uint32_t block_num)
+{
+    if (block_num < DATA_BLOCK_START || block_num >= DISK_SIZE_BLOCKS)
+        return 0;
+    uint32_t idx = block_num - DATA_BLOCK_START;
+    return bit_test(data_bitmap, idx);
+}
+
+uint32_t bitmap_free_block_count(void)
+{
+    uint32_t count = 0;
+    for (uint32_t i = 0; i < MAX_DATA_BLOCKS; i++) {
+        if (!bit_test(data_bitmap, i))
+            count++;
+    }
+    return count;
+}
