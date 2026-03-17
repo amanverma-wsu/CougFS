@@ -9,6 +9,9 @@ A simplified Unix-like file system implementation in C that runs entirely in use
 - Persistent storage via virtual disk image (disk.img)
 - Command-line interface
 
+<<<<<<< HEAD
+# Build
+=======
 ## Prerequisites
 
 Before building CougFS, ensure you have the following installed:
@@ -26,6 +29,7 @@ cd CougFS
 
 ### 2. Build the Project
 ```bash
+>>>>>>> origin/main
 make
 ```
 
