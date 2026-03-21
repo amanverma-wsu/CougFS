@@ -92,6 +92,7 @@ int inode_free(uint32_t ino)
 
 uint32_t inode_get_block(cougfs_inode_t *inode, uint32_t logical_block, int alloc)
 {
+<<<<<<< HEAD
     if (logical_block < DIRECT_BLOCKS) {
         if (inode->direct[logical_block] != INVALID_BLOCK)
             return inode->direct[logical_block];
@@ -138,10 +139,18 @@ uint32_t inode_get_block(cougfs_inode_t *inode, uint32_t logical_block, int allo
     disk_write_block(inode->indirect, indirect_buf);
     inode->blocks++;
     return (uint32_t)dblk;
+=======
+    /* TODO: implement direct and indirect block mapping */
+    (void)inode;
+    (void)logical_block;
+    (void)alloc;
+    return INVALID_BLOCK;
+>>>>>>> cfffa47 (Initial commit)
 }
 
 int inode_truncate(uint32_t ino, cougfs_inode_t *inode, uint32_t new_size)
 {
+<<<<<<< HEAD
     uint32_t old_blocks = (inode->size + BLOCK_SIZE - 1) / BLOCK_SIZE;
     uint32_t new_blocks = (new_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
     if (new_size == 0)
@@ -165,4 +174,11 @@ int inode_truncate(uint32_t ino, cougfs_inode_t *inode, uint32_t new_size)
     inode_write(ino, inode);
     bitmap_sync();
     return 0;
+=======
+    /* TODO: implement file truncation */
+    (void)ino;
+    (void)inode;
+    (void)new_size;
+    return -1;
+>>>>>>> cfffa47 (Initial commit)
 }
