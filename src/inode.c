@@ -157,6 +157,12 @@ int inode_truncate(uint32_t ino, cougfs_inode_t *inode, uint32_t new_size)
         }
     }
     if (new_blocks <= DIRECT_BLOCKS && inode->indirect != INVALID_BLOCK) {
+        /* Zero out indirect block entries before freeing to prevent
+         * stale pointers if the block is reallocated later */
+        uint32_t zero_buf[BLOCK_SIZE / sizeof(uint32_t)];
+        memset(zero_buf, 0, sizeof(zero_buf));
+        disk_write_block(inode->indirect, zero_buf);
+
         bitmap_free_block(inode->indirect);
         inode->indirect = INVALID_BLOCK;
     }
