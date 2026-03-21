@@ -92,18 +92,77 @@ int inode_free(uint32_t ino)
 
 uint32_t inode_get_block(cougfs_inode_t *inode, uint32_t logical_block, int alloc)
 {
-    /* TODO: implement direct and indirect block mapping */
-    (void)inode;
-    (void)logical_block;
-    (void)alloc;
-    return INVALID_BLOCK;
+    if (logical_block < DIRECT_BLOCKS) {
+        if (inode->direct[logical_block] != INVALID_BLOCK)
+            return inode->direct[logical_block];
+        if (!alloc)
+            return INVALID_BLOCK;
+        int blk = bitmap_alloc_block();
+        if (blk < 0)
+            return INVALID_BLOCK;
+        uint8_t zero[BLOCK_SIZE];
+        memset(zero, 0, BLOCK_SIZE);
+        disk_write_block(blk, zero);
+        inode->direct[logical_block] = (uint32_t)blk;
+        inode->blocks++;
+        return (uint32_t)blk;
+    }
+    uint32_t indirect_idx = logical_block - DIRECT_BLOCKS;
+    if (indirect_idx >= BLOCK_SIZE / sizeof(uint32_t))
+        return INVALID_BLOCK;
+    if (inode->indirect == INVALID_BLOCK) {
+        if (!alloc)
+            return INVALID_BLOCK;
+        int iblk = bitmap_alloc_block();
+        if (iblk < 0)
+            return INVALID_BLOCK;
+        uint32_t zeros[BLOCK_SIZE / sizeof(uint32_t)];
+        memset(zeros, 0, sizeof(zeros));
+        disk_write_block(iblk, zeros);
+        inode->indirect = (uint32_t)iblk;
+    }
+    uint32_t indirect_buf[BLOCK_SIZE / sizeof(uint32_t)];
+    if (disk_read_block(inode->indirect, indirect_buf) < 0)
+        return INVALID_BLOCK;
+    if (indirect_buf[indirect_idx] != INVALID_BLOCK)
+        return indirect_buf[indirect_idx];
+    if (!alloc)
+        return INVALID_BLOCK;
+    int dblk = bitmap_alloc_block();
+    if (dblk < 0)
+        return INVALID_BLOCK;
+    uint8_t zero[BLOCK_SIZE];
+    memset(zero, 0, BLOCK_SIZE);
+    disk_write_block(dblk, zero);
+    indirect_buf[indirect_idx] = (uint32_t)dblk;
+    disk_write_block(inode->indirect, indirect_buf);
+    inode->blocks++;
+    return (uint32_t)dblk;
 }
 
 int inode_truncate(uint32_t ino, cougfs_inode_t *inode, uint32_t new_size)
 {
-    /* TODO: implement file truncation */
-    (void)ino;
-    (void)inode;
-    (void)new_size;
-    return -1;
+    uint32_t old_blocks = (inode->size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    uint32_t new_blocks = (new_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    if (new_size == 0)
+        new_blocks = 0;
+    for (uint32_t i = new_blocks; i < old_blocks; i++) {
+        uint32_t blk = inode_get_block(inode, i, 0);
+        if (blk != INVALID_BLOCK) {
+            bitmap_free_block(blk);
+            if (i < DIRECT_BLOCKS) {
+                inode->direct[i] = INVALID_BLOCK;
+            }
+            inode->blocks--;
+        }
+    }
+    if (new_blocks <= DIRECT_BLOCKS && inode->indirect != INVALID_BLOCK) {
+        bitmap_free_block(inode->indirect);
+        inode->indirect = INVALID_BLOCK;
+    }
+    inode->size = new_size;
+    inode->mtime = (uint32_t)time(NULL);
+    inode_write(ino, inode);
+    bitmap_sync();
+    return 0;
 }
