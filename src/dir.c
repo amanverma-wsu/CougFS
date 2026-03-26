@@ -156,27 +156,85 @@ int dir_is_empty(uint32_t dir_ino)
     return 1;
 }
 
-/* TODO: implement */
 int dir_create(uint32_t parent_ino, const char *name, uint16_t mode)
 {
-    (void)parent_ino; (void)name; (void)mode;
-    return -1;
+    if (dir_lookup(parent_ino, name) >= 0)
+        return -1;
+    int ino = inode_alloc(COUGFS_S_IFDIR | (mode & 0777));
+    if (ino < 0)
+        return -1;
+    if (dir_add_entry(ino, ".", ino, DT_DIR) < 0 ||
+        dir_add_entry(ino, "..", parent_ino, DT_DIR) < 0) {
+        inode_free(ino);
+        return -1;
+    }
+    if (dir_add_entry(parent_ino, name, ino, DT_DIR) < 0) {
+        inode_free(ino);
+        return -1;
+    }
+    cougfs_inode_t parent;
+    if (inode_read(parent_ino, &parent) == 0) {
+        parent.link_count++;
+        inode_write(parent_ino, &parent);
+    }
+    return ino;
 }
 
 int dir_remove(uint32_t parent_ino, const char *name)
 {
-    (void)parent_ino; (void)name;
-    return -1;
+    if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+        return -1;
+    int ino = dir_lookup(parent_ino, name);
+    if (ino < 0)
+        return -1;
+    cougfs_inode_t inode;
+    if (inode_read(ino, &inode) < 0)
+        return -1;
+    if (!(inode.mode & COUGFS_S_IFDIR))
+        return -1;
+    if (!dir_is_empty(ino))
+        return -1;
+    if (dir_remove_entry(parent_ino, name) < 0)
+        return -1;
+    cougfs_inode_t parent;
+    if (inode_read(parent_ino, &parent) == 0) {
+        if (parent.link_count > 1)
+            parent.link_count--;
+        inode_write(parent_ino, &parent);
+    }
+    inode_free(ino);
+    return 0;
 }
 
 int dir_resolve_path(const char *path)
 {
-    (void)path;
-    return -1;
+    return dir_resolve_path_from(ROOT_INODE, path);
 }
 
 int dir_resolve_path_from(uint32_t cwd_ino, const char *path)
 {
-    (void)cwd_ino; (void)path;
-    return -1;
+    if (path == NULL || path[0] == '\0')
+        return (int)cwd_ino;
+    uint32_t current;
+    if (path[0] == '/')
+        current = ROOT_INODE;
+    else
+        current = cwd_ino;
+    char buf[1024];
+    strncpy(buf, path, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    char *saveptr;
+    char *token = strtok_r(buf, "/", &saveptr);
+    while (token != NULL) {
+        if (strlen(token) == 0) {
+            token = strtok_r(NULL, "/", &saveptr);
+            continue;
+        }
+        int next = dir_lookup(current, token);
+        if (next < 0)
+            return -1;
+        current = (uint32_t)next;
+        token = strtok_r(NULL, "/", &saveptr);
+    }
+    return (int)current;
 }
