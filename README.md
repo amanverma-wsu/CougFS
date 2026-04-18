@@ -138,7 +138,3 @@ tests/              Test suite
 - **Tony Cao** (Tony2K3)
 - **Srishanth Reddy Surakanti** (SURAKANTISRISHANTHREDDY)
 - **Alan Qiu** (AlanRQiu)
-
-## License
-
-WSU CPTS 360 Course Project
