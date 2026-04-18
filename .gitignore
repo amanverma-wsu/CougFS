@@ -27,4 +27,5 @@ coverage/
 
 # Executables
 cougfs
+test_cougfs
 test_runner
