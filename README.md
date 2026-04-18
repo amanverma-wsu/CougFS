@@ -9,27 +9,7 @@ A simplified Unix-like file system implementation in C that runs entirely in use
 - Persistent storage via virtual disk image (disk.img)
 - Command-line interface
 
-<<<<<<< HEAD
 # Build
-=======
-## Prerequisites
-
-Before building CougFS, ensure you have the following installed:
-- GCC compiler
-- Make build system
-- Git (for cloning the repository)
-
-## Installation
-
-### 1. Clone the Repository
-```bash
-git clone https://github.com/amanverma-wsu/CougFS.git
-cd CougFS
-```
-
-### 2. Build the Project
-```bash
->>>>>>> origin/main
 make
 ```
 
