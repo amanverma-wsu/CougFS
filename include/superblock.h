@@ -3,13 +3,13 @@
 
 #include "cougfs.h"
 
-/* Đọc superblock từ block 0. Trả 0 nếu OK, -1 nếu lỗi/không hợp lệ. */
+/* Read the superblock from block 0. Returns 0 on success, -1 on invalid data. */
 int superblock_load(cougfs_superblock_t *sb);
 
-/* Format filesystem mới trên disk.img. Trả 0 nếu OK. */
+/* Format a fresh filesystem image and initialize the superblock. */
 int superblock_format(cougfs_superblock_t *sb);
 
-/* Ghi superblock hiện tại xuống block 0. */
+/* Persist the current superblock to block 0. */
 int superblock_sync(const cougfs_superblock_t *sb);
 
 #endif
