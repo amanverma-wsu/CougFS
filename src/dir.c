@@ -8,6 +8,8 @@
 
 int dir_lookup(uint32_t dir_ino, const char *name)
 {
+    if (name == NULL)
+        return -1;
     cougfs_inode_t dir_inode;
     if (inode_read(dir_ino, &dir_inode) < 0)
         return -1;
@@ -33,6 +35,8 @@ int dir_lookup(uint32_t dir_ino, const char *name)
 
 int dir_add_entry(uint32_t dir_ino, const char *name, uint32_t child_ino, uint8_t file_type)
 {
+    if (name == NULL || name[0] == '\0')
+        return -1;
     if (strlen(name) > MAX_NAME_LEN)
         return -1;
     cougfs_inode_t dir_inode;
@@ -158,6 +162,8 @@ int dir_is_empty(uint32_t dir_ino)
 
 int dir_create(uint32_t parent_ino, const char *name, uint16_t mode)
 {
+    if (name == NULL || name[0] == '\0')
+        return -1;
     if (dir_lookup(parent_ino, name) >= 0)
         return -1;
     int ino = inode_alloc(COUGFS_S_IFDIR | (mode & 0777));
