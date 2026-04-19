@@ -292,6 +292,40 @@ static void test_file(void)
     file_close(fd);
     file_delete(ROOT_INODE, "big.txt");
 
+    /* --- Permission and validation tests --- */
+
+    /* Read-only fd should not allow writes */
+    ino = file_create(ROOT_INODE, "readonly.txt", 0644);
+    ASSERT(ino > 0, "create readonly test file");
+    fd = file_open(ino, COUGFS_O_RDONLY);
+    ASSERT(fd >= 0, "open readonly test file");
+    ASSERT(file_write(fd, "bad", 3) < 0, "write to O_RDONLY fd fails");
+    file_close(fd);
+
+    /* Write-only fd should not allow reads */
+    fd = file_open(ino, COUGFS_O_WRONLY);
+    ASSERT(fd >= 0, "open writeonly test file");
+    char ro_buf[16];
+    ASSERT(file_read(fd, ro_buf, sizeof(ro_buf)) < 0, "read from O_WRONLY fd fails");
+    file_close(fd);
+    file_delete(ROOT_INODE, "readonly.txt");
+
+    /* Directory should not open as regular file */
+    int test_dir = dir_create(ROOT_INODE, "noopen", 0755);
+    ASSERT(test_dir > 0, "create dir for open test");
+    ASSERT(file_open(test_dir, COUGFS_O_RDONLY) < 0, "opening directory as file fails");
+    dir_remove(ROOT_INODE, "noopen");
+
+    /* Empty names should fail */
+    ASSERT(file_create(ROOT_INODE, "", 0644) < 0, "empty filename rejected");
+    ASSERT(dir_create(ROOT_INODE, "", 0755) < 0, "empty dirname rejected");
+
+    /* NULL stat pointer should fail */
+    ino = file_create(ROOT_INODE, "nulltest.txt", 0644);
+    ASSERT(ino > 0, "create null test file");
+    ASSERT(file_stat(ino, NULL) < 0, "NULL stat pointer rejected");
+    file_delete(ROOT_INODE, "nulltest.txt");
+
     fs_unmount();
     unlink(TEST_DISK);
     printf("\n");
