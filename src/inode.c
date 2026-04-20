@@ -90,23 +90,26 @@ int inode_free(uint32_t ino)
     return 0;
 }
 
-uint32_t inode_get_block(cougfs_inode_t *inode, uint32_t logical_block, int alloc)
+static uint32_t handle_direct_block(cougfs_inode_t *inode, uint32_t logical_block, int alloc)
 {
-    if (logical_block < DIRECT_BLOCKS) {
-        if (inode->direct[logical_block] != INVALID_BLOCK)
-            return inode->direct[logical_block];
-        if (!alloc)
-            return INVALID_BLOCK;
-        int blk = bitmap_alloc_block();
-        if (blk < 0)
-            return INVALID_BLOCK;
-        uint8_t zero[BLOCK_SIZE];
-        memset(zero, 0, BLOCK_SIZE);
-        disk_write_block(blk, zero);
-        inode->direct[logical_block] = (uint32_t)blk;
-        inode->blocks++;
-        return (uint32_t)blk;
-    }
+    if (inode->direct[logical_block] != INVALID_BLOCK)
+        return inode->direct[logical_block];
+    if (!alloc)
+        return INVALID_BLOCK;
+    int blk = bitmap_alloc_block();
+    if (blk < 0)
+        return INVALID_BLOCK;
+    if (disk_zero_and_write_block((uint32_t)blk) < 0)
+        return INVALID_BLOCK;
+    inode->direct[logical_block] = (uint32_t)blk;
+    inode->blocks++;
+    return (uint32_t)blk;
+}
+
+static uint32_t handle_indirect_block(cougfs_inode_t *inode,
+                                      uint32_t logical_block,
+                                      int alloc)
+{
     uint32_t indirect_idx = logical_block - DIRECT_BLOCKS;
     if (indirect_idx >= BLOCK_SIZE / sizeof(uint32_t))
         return INVALID_BLOCK;
@@ -116,9 +119,8 @@ uint32_t inode_get_block(cougfs_inode_t *inode, uint32_t logical_block, int allo
         int iblk = bitmap_alloc_block();
         if (iblk < 0)
             return INVALID_BLOCK;
-        uint32_t zeros[BLOCK_SIZE / sizeof(uint32_t)];
-        memset(zeros, 0, sizeof(zeros));
-        disk_write_block(iblk, zeros);
+        if (disk_zero_and_write_block((uint32_t)iblk) < 0)
+            return INVALID_BLOCK;
         inode->indirect = (uint32_t)iblk;
     }
     uint32_t indirect_buf[BLOCK_SIZE / sizeof(uint32_t)];
@@ -131,13 +133,20 @@ uint32_t inode_get_block(cougfs_inode_t *inode, uint32_t logical_block, int allo
     int dblk = bitmap_alloc_block();
     if (dblk < 0)
         return INVALID_BLOCK;
-    uint8_t zero[BLOCK_SIZE];
-    memset(zero, 0, BLOCK_SIZE);
-    disk_write_block(dblk, zero);
+    if (disk_zero_and_write_block((uint32_t)dblk) < 0)
+        return INVALID_BLOCK;
     indirect_buf[indirect_idx] = (uint32_t)dblk;
-    disk_write_block(inode->indirect, indirect_buf);
+    if (disk_write_block(inode->indirect, indirect_buf) < 0)
+        return INVALID_BLOCK;
     inode->blocks++;
     return (uint32_t)dblk;
+}
+
+uint32_t inode_get_block(cougfs_inode_t *inode, uint32_t logical_block, int alloc)
+{
+    if (logical_block < DIRECT_BLOCKS)
+        return handle_direct_block(inode, logical_block, alloc);
+    return handle_indirect_block(inode, logical_block, alloc);
 }
 
 int inode_truncate(uint32_t ino, cougfs_inode_t *inode, uint32_t new_size)

@@ -21,6 +21,9 @@ int disk_read_block(uint32_t block_num, void *buf);
 /* Write a single block from buf to disk. Returns 0 on success. */
 int disk_write_block(uint32_t block_num, const void *buf);
 
+/* Write a zeroed block to disk. Returns 0 on success. */
+int disk_zero_and_write_block(uint32_t block_num);
+
 /* Sync all pending writes to disk. */
 void disk_sync(void);
 

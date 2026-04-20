@@ -96,6 +96,13 @@ int disk_write_block(uint32_t block_num, const void *buf)
     return 0;
 }
 
+int disk_zero_and_write_block(uint32_t block_num)
+{
+    uint8_t zeros[BLOCK_SIZE];
+    memset(zeros, 0, BLOCK_SIZE);
+    return disk_write_block(block_num, zeros);
+}
+
 void disk_sync(void)
 {
     if (g_disk_fd >= 0)
