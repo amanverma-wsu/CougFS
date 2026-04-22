@@ -174,12 +174,24 @@ static int cougfs_open(const char *path, struct fuse_file_info *fi)
     else if ((fi->flags & O_ACCMODE) == O_WRONLY)
         flags = COUGFS_O_WRONLY;
 
+    cougfs_inode_t inode;
+
+    if (inode_read((uint32_t)ino, &inode) < 0) {
+        fs_write_unlock();
+        return -EIO;
+    }
+
+    if ((inode.mode & COUGFS_S_IFMT) == COUGFS_S_IFDIR) {
+        fs_write_unlock();
+        return -EISDIR;
+    }
+
     int fd = file_open((uint32_t)ino, flags);
 
     if (fd < 0) {
         fs_write_unlock();
-        return -EISDIR;
-    }
+        return -EIO;
+}
 
     fi->fh = fd;
 
@@ -267,9 +279,16 @@ static int cougfs_create(const char *path, mode_t mode,
 
     int parent_ino = dir_resolve_path(parent_path);
 
-    if (parent_ino < 0) {
+    cougfs_inode_t parent_inode;
+
+    if (inode_read((uint32_t)parent_ino, &parent_inode) < 0) {
         fs_write_unlock();
-        return -ENOENT;
+        return -EIO;
+    }
+
+    if ((parent_inode.mode & COUGFS_S_IFMT) != COUGFS_S_IFDIR) {
+        fs_write_unlock();
+        return -ENOTDIR;
     }
 
     if (dir_lookup((uint32_t)parent_ino, filename) >= 0) {
@@ -343,9 +362,16 @@ static int cougfs_mkdir(const char *path, mode_t mode)
 
     int parent_ino = dir_resolve_path(parent_path);
 
-    if (parent_ino < 0) {
+    cougfs_inode_t parent_inode;
+
+    if (inode_read((uint32_t)parent_ino, &parent_inode) < 0) {
         fs_write_unlock();
-        return -ENOENT;
+        return -EIO;
+    }
+
+    if ((parent_inode.mode & COUGFS_S_IFMT) != COUGFS_S_IFDIR) {
+        fs_write_unlock();
+        return -ENOTDIR;
     }
 
     if (dir_lookup((uint32_t)parent_ino, dirname) >= 0) {
@@ -374,9 +400,16 @@ static int cougfs_rmdir(const char *path)
 
     int parent_ino = dir_resolve_path(parent_path);
 
-    if (parent_ino < 0) {
+    cougfs_inode_t target_inode;
+
+    if (inode_read((uint32_t)ino, &target_inode) < 0) {
         fs_write_unlock();
-        return -ENOENT;
+        return -EIO;
+    }
+
+    if ((target_inode.mode & COUGFS_S_IFMT) != COUGFS_S_IFDIR) {
+        fs_write_unlock();
+        return -ENOTDIR;
     }
 
     int ino = dir_lookup((uint32_t)parent_ino, dirname);
@@ -386,10 +419,10 @@ static int cougfs_rmdir(const char *path)
         return -ENOENT;
     }
 
-    if (!dir_is_empty((uint32_t)ino)) {
+    if (dir_lookup((uint32_t)parent_ino, filename) < 0) {
         fs_write_unlock();
-        return -ENOTEMPTY;
-    }
+        return -ENOENT;
+}
 
     int ret = dir_remove((uint32_t)parent_ino, dirname);
 

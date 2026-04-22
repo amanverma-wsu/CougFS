@@ -105,7 +105,9 @@ int inode_free(uint32_t ino)
     }
 
     memset(&inode, 0, sizeof(inode));
-    inode_write(ino, &inode);
+    if (inode_write(ino, &inode) < 0)
+        return -1;
+
     bitmap_free_inode(ino);
     bitmap_sync();
 
@@ -249,9 +251,10 @@ int inode_truncate(uint32_t ino, cougfs_inode_t *inode, uint32_t new_size)
         uint32_t zero_buf[BLOCK_SIZE / sizeof(uint32_t)];
         memset(zero_buf, 0, sizeof(zero_buf));
 
-        disk_write_block(inode->indirect, zero_buf);
-        bitmap_free_block(inode->indirect);
+        if (disk_write_block(inode->indirect, zero_buf) < 0)
+            return -1;
 
+        bitmap_free_block(inode->indirect);
         inode->indirect = INVALID_BLOCK;
         indirect_dirty = 0;
     } else if (indirect_dirty) {
