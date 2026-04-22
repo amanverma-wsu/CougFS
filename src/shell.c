@@ -157,6 +157,8 @@ static void cmd_touch(const char *args)
         return;
     }
 
+    fs_write_lock();
+
     /* Check if file already exists */
     int existing = dir_lookup(cwd_ino, args);
     if (existing >= 0) {
@@ -166,10 +168,10 @@ static void cmd_touch(const char *args)
             inode.mtime = (uint32_t)time(NULL);
             inode_write(existing, &inode);
         }
+        fs_write_unlock();
         return;
     }
 
-    fs_write_lock();
     int ino = file_create(cwd_ino, args, 0644);
     fs_write_unlock();
 
@@ -190,11 +192,11 @@ static void cmd_cat(const char *args)
         return;
     }
 
-    fs_read_lock();
+    fs_write_lock();
     int fd = file_open(ino, COUGFS_O_RDONLY);
     if (fd < 0) {
         printf("cat: cannot open '%s'\n", args);
-        fs_read_unlock();
+        fs_write_unlock();
         return;
     }
 
@@ -207,7 +209,7 @@ static void cmd_cat(const char *args)
     printf("\n");
 
     file_close(fd);
-    fs_read_unlock();
+    fs_write_unlock();
 }
 
 static void cmd_write(const char *args)
@@ -233,19 +235,18 @@ static void cmd_write(const char *args)
     filename[name_len] = '\0';
     text = space + 1;
 
-    /* Open or create file */
+    fs_write_lock();
+    /* Hold the write lock across lookup/create/open/write to avoid races. */
     int ino = dir_lookup(cwd_ino, filename);
     if (ino < 0) {
-        fs_write_lock();
         ino = file_create(cwd_ino, filename, 0644);
-        fs_write_unlock();
         if (ino < 0) {
             printf("write: cannot create '%s'\n", filename);
+            fs_write_unlock();
             return;
         }
     }
 
-    fs_write_lock();
     int fd = file_open(ino, COUGFS_O_WRONLY | COUGFS_O_TRUNC);
     if (fd < 0) {
         printf("write: cannot open '%s'\n", filename);

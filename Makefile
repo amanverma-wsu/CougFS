@@ -2,19 +2,27 @@ CC      = gcc
 CFLAGS  = -Wall -Wextra -Werror -std=c11 -g -Iinclude -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE
 LDFLAGS = -lpthread
 
+ifeq ($(ENABLE_FUSE),1)
+FUSE_CFLAGS ?= $(shell pkg-config --cflags fuse 2>/dev/null)
+FUSE_LIBS ?= $(shell pkg-config --libs fuse 2>/dev/null)
+CFLAGS += -DENABLE_FUSE $(FUSE_CFLAGS)
+LDFLAGS += $(FUSE_LIBS)
+endif
+
 SRC_DIR = src
 BUILD_DIR = build
+OBJ_DIR = $(BUILD_DIR)/$(if $(filter 1,$(ENABLE_FUSE)),fuse,default)
 TEST_DIR = tests
 
 SRCS = $(wildcard $(SRC_DIR)/*.c)
-OBJS = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(SRCS))
+OBJS = $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SRCS))
 TARGET = $(BUILD_DIR)/cougfs
 
 # Core objects (everything except main.o for test linking)
-CORE_OBJS = $(filter-out $(BUILD_DIR)/main.o, $(OBJS))
+CORE_OBJS = $(filter-out $(OBJ_DIR)/main.o, $(OBJS))
 
 TEST_SRCS = $(TEST_DIR)/test_main.c
-TEST_OBJS = $(patsubst $(TEST_DIR)/%.c, $(BUILD_DIR)/%.o, $(TEST_SRCS))
+TEST_OBJS = $(patsubst $(TEST_DIR)/%.c, $(OBJ_DIR)/tests/%.o, $(TEST_SRCS))
 TEST_BIN = $(BUILD_DIR)/test_cougfs
 
 all: $(TARGET)
@@ -24,12 +32,12 @@ $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 	@echo "✓ Built: $@"
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
-	@mkdir -p $(BUILD_DIR)
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/%.o: $(TEST_DIR)/%.c
-	@mkdir -p $(BUILD_DIR)
+$(OBJ_DIR)/tests/%.o: $(TEST_DIR)/%.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 test: $(TEST_BIN)
