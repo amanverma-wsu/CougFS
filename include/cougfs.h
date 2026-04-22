@@ -61,6 +61,7 @@
 
 /* Maximum file size: 12 direct + 1024 indirect = 1036 blocks */
 #define MAX_FILE_BLOCKS    (DIRECT_BLOCKS + (BLOCK_SIZE / sizeof(uint32_t)))
+#define MAX_FILE_SIZE      (MAX_FILE_BLOCKS * BLOCK_SIZE)
 
 /*
  * Superblock: stored in block 0.

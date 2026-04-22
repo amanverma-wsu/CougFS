@@ -265,6 +265,11 @@ static void test_file(void)
     ASSERT(file_stat(ino, &stat_inode) == 0, "stat after truncate");
     ASSERT(stat_inode.size == 5, "truncated size is correct");
 
+    ASSERT(file_truncate(ino, MAX_FILE_SIZE + 1) < 0,
+           "truncate past max file size fails");
+    ASSERT(file_stat(ino, &stat_inode) == 0, "stat after failed truncate");
+    ASSERT(stat_inode.size == 5, "failed truncate preserves size");
+
     /* Delete */
     ASSERT(file_delete(ROOT_INODE, "hello.txt") == 0, "file_delete succeeds");
     ASSERT(dir_lookup(ROOT_INODE, "hello.txt") < 0, "deleted file not found");
@@ -281,6 +286,14 @@ static void test_file(void)
     memset(big_data, 'X', sizeof(big_data));
     written = file_write(fd, big_data, sizeof(big_data));
     ASSERT(written == (int)sizeof(big_data), "write 8KB succeeds");
+
+    ASSERT(file_seek(fd, MAX_FILE_SIZE + 1, 0) < 0,
+           "seek past max file size fails");
+    ASSERT(file_seek(fd, MAX_FILE_SIZE - 1, 0) == MAX_FILE_SIZE - 1,
+           "seek to last valid byte succeeds");
+    ASSERT(file_write(fd, "YZ", 2) == 1, "write is capped at max file size");
+    ASSERT(file_stat(ino, &stat_inode) == 0, "stat after capped write");
+    ASSERT(stat_inode.size == MAX_FILE_SIZE, "capped write grows to max size");
 
     /* Read it back */
     file_seek(fd, 0, 0);

@@ -117,6 +117,10 @@ int file_write(int fd, const void *buf, uint32_t count)
     if (inode_read(fd_table[fd].inode, &inode) < 0)
         return -1;
     uint32_t offset = fd_table[fd].offset;
+    if (offset >= MAX_FILE_SIZE)
+        return count == 0 ? 0 : -1;
+    if (count > MAX_FILE_SIZE - offset)
+        count = MAX_FILE_SIZE - offset;
     uint32_t bytes_written = 0;
     uint8_t block_buf[BLOCK_SIZE];
     while (bytes_written < count) {
@@ -162,6 +166,8 @@ int file_seek(int fd, int32_t offset, int whence)
     default: return -1;
     }
     if (new_offset < 0)
+        return -1;
+    if ((uint32_t)new_offset > MAX_FILE_SIZE)
         return -1;
     fd_table[fd].offset = (uint32_t)new_offset;
     return (int)fd_table[fd].offset;

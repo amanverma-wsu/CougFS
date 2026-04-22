@@ -142,6 +142,9 @@ uint32_t inode_get_block(cougfs_inode_t *inode, uint32_t logical_block, int allo
 
 int inode_truncate(uint32_t ino, cougfs_inode_t *inode, uint32_t new_size)
 {
+    if (new_size > MAX_FILE_SIZE)
+        return -1;
+
     uint32_t old_blocks = (inode->size + BLOCK_SIZE - 1) / BLOCK_SIZE;
     uint32_t new_blocks = (new_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
     if (new_size == 0)
