@@ -22,30 +22,50 @@
 /* Helper: split path into parent path and filename */
 static int split_path(const char *path, char *parent, char *name)
 {
+    if (path == NULL || parent == NULL || name == NULL)
+        return -1;
+
+    if (strlen(path) >= 1024)
+        return -1;
+
     char tmp[1024];
+
     strncpy(tmp, path, sizeof(tmp) - 1);
     tmp[sizeof(tmp) - 1] = '\0';
 
     char *last_slash = strrchr(tmp, '/');
+
     if (!last_slash)
+        return -1;
+
+    if (*(last_slash + 1) == '\0')
+        return -1;
+
+    if (strlen(last_slash + 1) > MAX_NAME_LEN)
         return -1;
 
     strncpy(name, last_slash + 1, MAX_NAME_LEN);
     name[MAX_NAME_LEN] = '\0';
 
-    if (last_slash == tmp)
+    if (last_slash == tmp) {
         strcpy(parent, "/");
-    else {
+    } else {
         *last_slash = '\0';
+
+        if (strlen(tmp) >= 1024)
+            return -1;
+
         strncpy(parent, tmp, 1023);
         parent[1023] = '\0';
     }
+
     return 0;
 }
 
 static void inode_to_stat(const cougfs_inode_t *inode, struct stat *st)
 {
     memset(st, 0, sizeof(*st));
+
     st->st_mode = inode->mode;
     st->st_nlink = inode->link_count;
     st->st_uid = inode->uid;
@@ -61,17 +81,23 @@ static void inode_to_stat(const cougfs_inode_t *inode, struct stat *st)
 static int cougfs_getattr(const char *path, struct stat *st)
 {
     fs_read_lock();
+
     int ino = dir_resolve_path(path);
+
     if (ino < 0) {
         fs_read_unlock();
         return -ENOENT;
     }
+
     cougfs_inode_t inode;
-    if (inode_read(ino, &inode) < 0) {
+
+    if (inode_read((uint32_t)ino, &inode) < 0) {
         fs_read_unlock();
         return -EIO;
     }
+
     inode_to_stat(&inode, st);
+
     fs_read_unlock();
     return 0;
 }
@@ -82,25 +108,40 @@ static int cougfs_readdir(const char *path, void *buf,
 {
     (void)offset;
     (void)fi;
+
     fs_read_lock();
+
     int dir_ino = dir_resolve_path(path);
+
     if (dir_ino < 0) {
         fs_read_unlock();
         return -ENOENT;
     }
+
     cougfs_inode_t dir_inode;
-    if (inode_read(dir_ino, &dir_inode) < 0) {
+
+    if (inode_read((uint32_t)dir_ino, &dir_inode) < 0) {
         fs_read_unlock();
         return -EIO;
     }
+
+    if ((dir_inode.mode & COUGFS_S_IFMT) != COUGFS_S_IFDIR) {
+        fs_read_unlock();
+        return -ENOTDIR;
+    }
+
     uint32_t num_blocks = (dir_inode.size + BLOCK_SIZE - 1) / BLOCK_SIZE;
     cougfs_dir_entry_t entries[DIR_ENTRIES_PER_BLOCK];
+
     for (uint32_t b = 0; b < num_blocks; b++) {
         uint32_t blk = inode_get_block(&dir_inode, b, 0);
+
         if (blk == INVALID_BLOCK)
             continue;
+
         if (disk_read_block(blk, entries) < 0)
             continue;
+
         for (int i = 0; i < DIR_ENTRIES_PER_BLOCK; i++) {
             if (entries[i].inode != INVALID_INODE) {
                 if (filler(buf, entries[i].name, NULL, 0) != 0) {
@@ -110,30 +151,38 @@ static int cougfs_readdir(const char *path, void *buf,
             }
         }
     }
+
     fs_read_unlock();
     return 0;
 }
 
 static int cougfs_open(const char *path, struct fuse_file_info *fi)
 {
-    /* file_open updates atime, so we need a write lock */
     fs_write_lock();
+
     int ino = dir_resolve_path(path);
+
     if (ino < 0) {
         fs_write_unlock();
         return -ENOENT;
     }
+
     int flags = COUGFS_O_RDWR;
+
     if ((fi->flags & O_ACCMODE) == O_RDONLY)
         flags = COUGFS_O_RDONLY;
     else if ((fi->flags & O_ACCMODE) == O_WRONLY)
         flags = COUGFS_O_WRONLY;
-    int fd = file_open(ino, flags);
+
+    int fd = file_open((uint32_t)ino, flags);
+
     if (fd < 0) {
         fs_write_unlock();
-        return -EISDIR; /* most likely a directory */
+        return -EISDIR;
     }
+
     fi->fh = fd;
+
     fs_write_unlock();
     return 0;
 }
@@ -142,14 +191,26 @@ static int cougfs_read(const char *path, char *buf, size_t size,
                        off_t offset, struct fuse_file_info *fi)
 {
     (void)path;
+
+    if (offset < 0 || offset > INT32_MAX)
+        return -EINVAL;
+
     if (size > UINT32_MAX)
         return -EINVAL;
-    /* file_read modifies fd offset and atime, needs write lock */
+
     fs_write_lock();
+
     int fd = (int)fi->fh;
-    file_seek(fd, (int32_t)offset, 0);
+
+    if (file_seek(fd, (int32_t)offset, 0) < 0) {
+        fs_write_unlock();
+        return -EINVAL;
+    }
+
     int ret = file_read(fd, buf, (uint32_t)size);
+
     fs_write_unlock();
+
     return ret < 0 ? -EIO : ret;
 }
 
@@ -157,20 +218,37 @@ static int cougfs_write(const char *path, const char *buf, size_t size,
                         off_t offset, struct fuse_file_info *fi)
 {
     (void)path;
+
+    if (offset < 0 || offset > INT32_MAX)
+        return -EINVAL;
+
     if (size > UINT32_MAX)
         return -EINVAL;
+
     fs_write_lock();
+
     int fd = (int)fi->fh;
-    file_seek(fd, (int32_t)offset, 0);
+
+    if (file_seek(fd, (int32_t)offset, 0) < 0) {
+        fs_write_unlock();
+        return -EINVAL;
+    }
+
     int ret = file_write(fd, buf, (uint32_t)size);
+
     fs_write_unlock();
+
     return ret < 0 ? -EIO : ret;
 }
 
 static int cougfs_release(const char *path, struct fuse_file_info *fi)
 {
     (void)path;
+
+    fs_write_lock();
     file_close((int)fi->fh);
+    fs_write_unlock();
+
     return 0;
 }
 
@@ -178,35 +256,44 @@ static int cougfs_create(const char *path, mode_t mode,
                          struct fuse_file_info *fi)
 {
     fs_write_lock();
+
     char parent_path[1024];
     char filename[MAX_NAME_LEN + 1];
+
     if (split_path(path, parent_path, filename) < 0) {
         fs_write_unlock();
         return -EINVAL;
     }
+
     int parent_ino = dir_resolve_path(parent_path);
+
     if (parent_ino < 0) {
         fs_write_unlock();
         return -ENOENT;
     }
-    /* Check if file already exists */
-    if (dir_lookup(parent_ino, filename) >= 0) {
+
+    if (dir_lookup((uint32_t)parent_ino, filename) >= 0) {
         fs_write_unlock();
         return -EEXIST;
     }
-    int ino = file_create(parent_ino, filename, mode & 0777);
+
+    int ino = file_create((uint32_t)parent_ino, filename, mode & 0777);
+
     if (ino < 0) {
         fs_write_unlock();
         return -EIO;
     }
-    int fd = file_open(ino, COUGFS_O_RDWR);
+
+    int fd = file_open((uint32_t)ino, COUGFS_O_RDWR);
+
     if (fd < 0) {
-        /* Clean up orphan file */
-        file_delete(parent_ino, filename);
+        file_delete((uint32_t)parent_ino, filename);
         fs_write_unlock();
         return -EIO;
     }
+
     fi->fh = fd;
+
     fs_write_unlock();
     return 0;
 }
@@ -214,90 +301,126 @@ static int cougfs_create(const char *path, mode_t mode,
 static int cougfs_unlink(const char *path)
 {
     fs_write_lock();
+
     char parent_path[1024];
     char filename[MAX_NAME_LEN + 1];
+
     if (split_path(path, parent_path, filename) < 0) {
         fs_write_unlock();
         return -EINVAL;
     }
+
     int parent_ino = dir_resolve_path(parent_path);
+
     if (parent_ino < 0) {
         fs_write_unlock();
         return -ENOENT;
     }
-    if (dir_lookup(parent_ino, filename) < 0) {
+
+    if (dir_lookup((uint32_t)parent_ino, filename) < 0) {
         fs_write_unlock();
         return -ENOENT;
     }
-    int ret = file_delete(parent_ino, filename);
+
+    int ret = file_delete((uint32_t)parent_ino, filename);
+
     fs_write_unlock();
+
     return ret < 0 ? -EIO : 0;
 }
 
 static int cougfs_mkdir(const char *path, mode_t mode)
 {
     fs_write_lock();
+
     char parent_path[1024];
     char dirname[MAX_NAME_LEN + 1];
+
     if (split_path(path, parent_path, dirname) < 0) {
         fs_write_unlock();
         return -EINVAL;
     }
+
     int parent_ino = dir_resolve_path(parent_path);
+
     if (parent_ino < 0) {
         fs_write_unlock();
         return -ENOENT;
     }
-    if (dir_lookup(parent_ino, dirname) >= 0) {
+
+    if (dir_lookup((uint32_t)parent_ino, dirname) >= 0) {
         fs_write_unlock();
         return -EEXIST;
     }
-    int ret = dir_create(parent_ino, dirname, mode & 0777);
+
+    int ret = dir_create((uint32_t)parent_ino, dirname, mode & 0777);
+
     fs_write_unlock();
+
     return ret < 0 ? -EIO : 0;
 }
 
 static int cougfs_rmdir(const char *path)
 {
     fs_write_lock();
+
     char parent_path[1024];
     char dirname[MAX_NAME_LEN + 1];
+
     if (split_path(path, parent_path, dirname) < 0) {
         fs_write_unlock();
         return -EINVAL;
     }
+
     int parent_ino = dir_resolve_path(parent_path);
+
     if (parent_ino < 0) {
         fs_write_unlock();
         return -ENOENT;
     }
-    int ino = dir_lookup(parent_ino, dirname);
+
+    int ino = dir_lookup((uint32_t)parent_ino, dirname);
+
     if (ino < 0) {
         fs_write_unlock();
         return -ENOENT;
     }
-    if (!dir_is_empty(ino)) {
+
+    if (!dir_is_empty((uint32_t)ino)) {
         fs_write_unlock();
         return -ENOTEMPTY;
     }
-    int ret = dir_remove(parent_ino, dirname);
+
+    int ret = dir_remove((uint32_t)parent_ino, dirname);
+
     fs_write_unlock();
+
     return ret < 0 ? -EIO : 0;
 }
 
 static int cougfs_truncate(const char *path, off_t size)
 {
-    if (size < 0 || (uint64_t)size > UINT32_MAX) {
+    if (size < 0)
         return -EINVAL;
-    }
+
+    uint64_t max_size = (uint64_t)MAX_FILE_BLOCKS * BLOCK_SIZE;
+
+    if ((uint64_t)size > max_size)
+        return -EINVAL;
+
     fs_write_lock();
+
     int ino = dir_resolve_path(path);
+
     if (ino < 0) {
         fs_write_unlock();
         return -ENOENT;
     }
-    int ret = file_truncate(ino, (uint32_t)size);
+
+    int ret = file_truncate((uint32_t)ino, (uint32_t)size);
+
     fs_write_unlock();
+
     return ret < 0 ? -EIO : 0;
 }
 
@@ -321,8 +444,11 @@ int cougfs_fuse_main(int argc, char *argv[], const char *disk_path)
         fprintf(stderr, "Failed to mount CougFS from %s\n", disk_path);
         return 1;
     }
+
     int ret = fuse_main(argc, argv, &cougfs_ops, NULL);
+
     fs_unmount();
+
     return ret;
 }
 
@@ -336,6 +462,7 @@ int cougfs_fuse_main(int argc, char *argv[], const char *disk_path)
     (void)argc;
     (void)argv;
     (void)disk_path;
+
     fprintf(stderr, "FUSE support not compiled. Rebuild with ENABLE_FUSE=1.\n");
     return 1;
 }
