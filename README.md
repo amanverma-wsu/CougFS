@@ -128,7 +128,7 @@ tests/              Test suite
 - **Language**: C (C11)
 - **OS**: Linux
 - **Compiler**: GCC with `-Wall -Wextra -Werror`
-- **Libraries**: POSIX system calls, pthread, FUSE (optional)
+- **Libraries**: POSIX system calls, pthread, FUSE
 - **Tools**: Make, Valgrind, GDB, GitHub Actions CI
 - **Testing**: Custom assertion framework, 74 test cases, zero memory leaks
 
