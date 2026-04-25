@@ -4,6 +4,32 @@
 
 A complete, production-oriented Unix-like file system implemented in C that runs entirely in user space using a virtual disk image file (`disk.img`).
 
+## Project Overview and Goals
+
+CougFS is a user-space Unix-like file system built in C for WSU CPTS 360. It runs on a virtual disk image and supports core filesystem features such as file creation, reading, writing, truncation, directories, and persistent storage. The main goal of the project was to apply systems programming concepts in a complete working system that is safe to test, easy to debug, and close to real filesystem behavior.
+
+## Major Themes
+
+### 1. Persistent Storage
+CougFS stores all filesystem state inside a disk image, which makes data survive across runs. This helped us understand how real filesystems organize on-disk structures such as superblocks, bitmaps, inodes, and data blocks.
+
+### 2. Metadata and Inode Management
+The filesystem uses inodes to store file metadata, block pointers, timestamps, and size. This theme was important because it showed how file names and file contents are managed separately in Unix-like systems.
+
+### 3. Reliability and Recovery
+We added journaling to improve crash recovery and reduce corruption risk. This theme taught us that systems code must handle failures carefully, not just normal execution.
+
+### 4. Concurrency and Synchronization
+CougFS uses reader/writer locks to protect shared filesystem data. This theme helped us understand race conditions, shared state, and the trade-off between safety and performance.
+
+## Design Decisions and Trade-Offs
+
+We chose a user-space design with a virtual disk image because it is safer and easier to test than a kernel-level filesystem. We also used a simple fixed block layout and direct plus single-indirect pointers to keep the design manageable. These choices made the project easier to build and debug, but they also limited scalability and performance compared to production filesystems. For concurrency, we preferred simpler locking for correctness, even though finer-grained locking could allow more parallelism.
+
+## Challenges Encountered and Lessons Learned
+
+One major challenge was keeping on-disk data consistent during updates, especially when truncating files or reusing blocks. Another challenge was handling indirect blocks correctly, since small mistakes could cause stale pointers or corruption. We also learned that concurrency adds complexity because code that works in one case may fail when multiple operations happen together. Overall, this project taught us the importance of careful error handling, modular design, and strong testing in systems programming.
+
 ## Features
 
 - **Superblock management** and filesystem initialization
